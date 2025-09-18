@@ -4,6 +4,8 @@ export interface ProductData {
   imageUrl: string;
 }
 
+const GEMINI_API_KEY = 'AIzaSyAIXEsy0O_sIbiRtabItJh5DIL137WW0N0';
+
 export const extractProductData = async (url: string): Promise<ProductData> => {
   try {
     // First, fetch the HTML content of the URL
@@ -25,7 +27,7 @@ export const extractProductData = async (url: string): Promise<ProductData> => {
         {
           parts: [
             {
-              text: `System: ${systemInstruction}\n\nUser: Extract product information from this HTML content:\n\n${htmlContent}`
+              text: `System: ${systemInstruction}\n\nUser: Extract product information from this HTML content:\n\n${htmlContent.substring(0, 10000)}`
             }
           ]
         }
@@ -34,7 +36,7 @@ export const extractProductData = async (url: string): Promise<ProductData> => {
 
     // Make request to Gemini API
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY || 'demo-key'}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: {
@@ -45,7 +47,9 @@ export const extractProductData = async (url: string): Promise<ProductData> => {
     );
 
     if (!geminiResponse.ok) {
-      throw new Error('Gemini API request failed');
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      throw new Error(`Gemini API request failed: ${geminiResponse.status}`);
     }
 
     const geminiResult = await geminiResponse.json();
@@ -60,11 +64,20 @@ export const extractProductData = async (url: string): Promise<ProductData> => {
     const productData = JSON.parse(cleanedText);
 
     // Validate the response structure
-    if (!productData.productName || !productData.description || !productData.imageUrl) {
+    if (!productData.productName || !productData.description) {
       throw new Error('Invalid AI response format');
     }
 
-    return productData;
+    // Ensure imageUrl is provided, use fallback if not
+    if (!productData.imageUrl) {
+      productData.imageUrl = '/placeholder-product.jpg';
+    }
+
+    return {
+      productName: productData.productName,
+      description: productData.description,
+      imageUrl: productData.imageUrl
+    };
   } catch (error) {
     console.error('Error extracting product data:', error);
     
@@ -74,7 +87,7 @@ export const extractProductData = async (url: string): Promise<ProductData> => {
     
     return {
       productName: `Product from ${domain}`,
-      description: `Product found at ${domain}. Please check the original URL for full details.`,
+      description: `Product found at ${domain}. AI extraction failed, please check the original URL for full details.`,
       imageUrl: '/placeholder-product.jpg'
     };
   }
