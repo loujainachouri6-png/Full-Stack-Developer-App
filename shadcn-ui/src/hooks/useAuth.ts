@@ -15,7 +15,24 @@ declare global {
   var __initial_auth_token: string;
 }
 
-const app = initializeApp(window.__firebase_config);
+// Fallback Firebase config for development
+const fallbackConfig = {
+  apiKey: "AIzaSyAIXEsy0O_sIbiRtabItJh5DIL137WW0N0",
+  authDomain: "wishlist-demo.firebaseapp.com",
+  projectId: "wishlist-demo",
+  storageBucket: "wishlist-demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef123456"
+};
+
+const getFirebaseConfig = () => {
+  if (typeof window !== 'undefined' && window.__firebase_config) {
+    return window.__firebase_config;
+  }
+  return fallbackConfig;
+};
+
+const app = initializeApp(getFirebaseConfig());
 const auth = getAuth(app);
 
 export const useAuth = () => {
@@ -32,7 +49,7 @@ export const useAuth = () => {
     // Initial authentication
     const initAuth = async () => {
       try {
-        if (window.__initial_auth_token) {
+        if (typeof window !== 'undefined' && window.__initial_auth_token) {
           await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
           await signInAnonymously(auth);

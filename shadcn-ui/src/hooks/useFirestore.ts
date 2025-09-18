@@ -27,7 +27,31 @@ declare global {
   var __app_id: string;
 }
 
-const app = initializeApp(window.__firebase_config);
+// Fallback Firebase config for development
+const fallbackConfig = {
+  apiKey: "AIzaSyAIXEsy0O_sIbiRtabItJh5DIL137WW0N0",
+  authDomain: "wishlist-demo.firebaseapp.com",
+  projectId: "wishlist-demo",
+  storageBucket: "wishlist-demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef123456"
+};
+
+const getFirebaseConfig = () => {
+  if (typeof window !== 'undefined' && window.__firebase_config) {
+    return window.__firebase_config;
+  }
+  return fallbackConfig;
+};
+
+const getAppId = () => {
+  if (typeof window !== 'undefined' && window.__app_id) {
+    return window.__app_id;
+  }
+  return 'demo-app';
+};
+
+const app = initializeApp(getFirebaseConfig());
 const db = getFirestore(app);
 
 export interface Product {
@@ -48,7 +72,8 @@ export const useFirestore = (userId: string | null) => {
   useEffect(() => {
     if (!userId) return;
 
-    const collectionPath = `artifacts/${window.__app_id}/users/${userId}/wishlist`;
+    const appId = getAppId();
+    const collectionPath = `artifacts/${appId}/users/${userId}/wishlist`;
     const q = query(
       collection(db, collectionPath),
       orderBy('timestamp', 'desc')
@@ -77,7 +102,8 @@ export const useFirestore = (userId: string | null) => {
     if (!userId) throw new Error('User not authenticated');
 
     try {
-      const collectionPath = `artifacts/${window.__app_id}/users/${userId}/wishlist`;
+      const appId = getAppId();
+      const collectionPath = `artifacts/${appId}/users/${userId}/wishlist`;
       await addDoc(collection(db, collectionPath), {
         ...productData,
         timestamp: serverTimestamp()
@@ -85,7 +111,7 @@ export const useFirestore = (userId: string | null) => {
 
       // Also add to public collection if isPublic is true
       if (productData.isPublic) {
-        const publicPath = `artifacts/${window.__app_id}/public/data/wishlists`;
+        const publicPath = `artifacts/${appId}/public/data/wishlists`;
         await addDoc(collection(db, publicPath), {
           ...productData,
           userId,
@@ -102,7 +128,8 @@ export const useFirestore = (userId: string | null) => {
     if (!userId) throw new Error('User not authenticated');
 
     try {
-      const collectionPath = `artifacts/${window.__app_id}/users/${userId}/wishlist`;
+      const appId = getAppId();
+      const collectionPath = `artifacts/${appId}/users/${userId}/wishlist`;
       await deleteDoc(doc(db, collectionPath, productId));
     } catch (err) {
       console.error('Error deleting product:', err);
@@ -125,7 +152,8 @@ export const usePublicWishlist = (targetUserId: string | null) => {
     }
 
     setLoading(true);
-    const publicPath = `artifacts/${window.__app_id}/public/data/wishlists`;
+    const appId = getAppId();
+    const publicPath = `artifacts/${appId}/public/data/wishlists`;
     const q = query(
       collection(db, publicPath),
       where('userId', '==', targetUserId),
