@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously, User, Auth } from 'firebase/auth';
 
 // Global variables from the platform
 declare global {
@@ -15,56 +15,87 @@ declare global {
   var __initial_auth_token: string;
 }
 
-// Fallback Firebase config for development
-const fallbackConfig = {
-  apiKey: "AIzaSyAIXEsy0O_sIbiRtabItJh5DIL137WW0N0",
-  authDomain: "wishlist-demo.firebaseapp.com",
-  projectId: "wishlist-demo",
-  storageBucket: "wishlist-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
-};
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
 
-const getFirebaseConfig = () => {
-  if (typeof window !== 'undefined' && window.__firebase_config) {
-    return window.__firebase_config;
+const initializeFirebase = () => {
+  if (!app && window.__firebase_config) {
+    app = initializeApp(window.__firebase_config);
+    auth = getAuth(app);
   }
-  return fallbackConfig;
+  return auth;
 };
 
-const app = initializeApp(getFirebaseConfig());
-const auth = getAuth(app);
-
+// Robust Firebase Authentication setup
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    // Initial authentication
-    const initAuth = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.__initial_auth_token) {
-          await signInWithCustomToken(auth, window.__initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    // Wait for Firebase config to be available and initialize
+    const checkAndInitialize = () => {
+      if (window.__firebase_config) {
+        const firebaseAuth = initializeFirebase();
+        
+        if (!firebaseAuth) {
+          setError('Firebase Auth not initialized');
+          setLoading(false);
+          return;
         }
-      } catch (err) {
-        console.error('Authentication error:', err);
-        setError('Failed to authenticate');
-        setLoading(false);
+
+        console.log('Setting up auth state listener...');
+
+        const unsubscribe = onAuthStateChanged(
+          firebaseAuth,
+          (user) => {
+            console.log('Auth state changed:', user ? 'User signed in' : 'No user');
+            setUser(user);
+            setLoading(false);
+            setError(null);
+          },
+          (error) => {
+            console.error('Auth state change error:', error);
+            setError(error.message);
+            setLoading(false);
+          }
+        );
+
+        return () => {
+          console.log('Cleaning up auth listener');
+          unsubscribe();
+        };
+      } else {
+        // Retry after a short delay
+        setTimeout(checkAndInitialize, 100);
       }
     };
 
-    initAuth();
-
-    return () => unsubscribe();
+    checkAndInitialize();
   }, []);
 
-  return { user, loading, error };
+  // Function to sign in anonymously (good for testing)
+  const signInAnonymous = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const firebaseAuth = initializeFirebase();
+      if (!firebaseAuth) {
+        throw new Error('Firebase Auth not initialized');
+      }
+
+      const result = await signInAnonymously(firebaseAuth);
+      console.log('Anonymous sign-in successful:', result.user.uid);
+      return result.user;
+    } catch (error: any) {
+      console.error('Anonymous sign-in error:', error);
+      setError(error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { user, loading, error, signInAnonymous };
 };
