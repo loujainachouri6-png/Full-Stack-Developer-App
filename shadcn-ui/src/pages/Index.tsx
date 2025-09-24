@@ -22,9 +22,6 @@ import {
   Clock
 } from 'lucide-react';
 import { RequestForm } from '@/components/RequestForm';
-import { RequestCard } from '@/components/RequestCard';
-import { Dashboard } from '@/components/Dashboard';
-import { AdminInterface } from '@/components/AdminInterface';
 
 export default function Index() {
   const { user, loading, error, signInAnonymous, forceSkipAuth } = useAuth();
@@ -202,14 +199,10 @@ export default function Index() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="requests" className="flex items-center">
               <Plus className="mr-2 h-4 w-4" />
               Feature Requests
-            </TabsTrigger>
-            <TabsTrigger value="admin" className="flex items-center">
-              <Shield className="mr-2 h-4 w-4" />
-              Admin Panel
             </TabsTrigger>
             <TabsTrigger value="dashboard" className="flex items-center">
               <BarChart3 className="mr-2 h-4 w-4" />
@@ -332,14 +325,70 @@ export default function Index() {
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {filteredRequests.map((request) => (
-                      <RequestCard
-                        key={request.id}
-                        request={request}
-                        onVote={voteOnRequest}
-                        onStatusChange={updateRequestStatus}
-                        onDelete={userRole === 'admin' ? deleteRequest : undefined}
-                        isAdmin={userRole === 'admin'}
-                      />
+                      <Card key={request.id} className="border-l-4 border-l-blue-500">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-lg">{request.title}</CardTitle>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Badge variant="outline">{request.status}</Badge>
+                                <Badge variant="secondary">{request.userPriority}</Badge>
+                                <Badge variant="outline">{request.appName}</Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                            {request.description}
+                          </p>
+                          
+                          {request.aiAnalysis && (
+                            <div className="bg-blue-50 p-3 rounded-lg mb-4">
+                              <h4 className="text-sm font-medium mb-2">AI Analysis</h4>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>Category: {request.aiAnalysis.category}</div>
+                                <div>Complexity: {request.aiAnalysis.complexity}/5</div>
+                                <div>Clarity: {request.aiAnalysis.clarityScore}/10</div>
+                                <div>Sentiment: {request.aiAnalysis.sentiment}</div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between text-sm text-gray-500">
+                            <div>By: {request.submitterName || 'Anonymous'}</div>
+                            <div>Votes: {request.votes}</div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 mt-4">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => voteOnRequest(request.id, true)}
+                            >
+                              👍 Vote
+                            </Button>
+                            {userRole === 'admin' && (
+                              <Select 
+                                value={request.status} 
+                                onValueChange={(value: any) => updateRequestStatus(request.id, value)}
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="submitted">Submitted</SelectItem>
+                                  <SelectItem value="reviewed">Reviewed</SelectItem>
+                                  <SelectItem value="approved">Approved</SelectItem>
+                                  <SelectItem value="in-progress">In Progress</SelectItem>
+                                  <SelectItem value="completed">Completed</SelectItem>
+                                  <SelectItem value="rejected">Rejected</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 )}
@@ -347,31 +396,54 @@ export default function Index() {
             </Card>
           </TabsContent>
 
-          {/* Admin Panel Tab */}
-          <TabsContent value="admin">
-            <AdminInterface
-              requests={requests}
-              onStatusChange={updateRequestStatus}
-            />
-          </TabsContent>
-
           {/* Analytics Dashboard Tab */}
           <TabsContent value="dashboard">
-            {analyticsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span>Loading analytics...</span>
-              </div>
-            ) : analytics ? (
-              <Dashboard analytics={analytics} requests={requests} />
-            ) : (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-500">No analytics data available yet</p>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Analytics Dashboard</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {analyticsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                    <span>Loading analytics...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{requests.length}</div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {requests.filter(r => ['submitted', 'analyzing', 'reviewed'].includes(r.status)).length}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Completed</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-green-600">
+                          {requests.filter(r => r.status === 'completed').length}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Settings Tab */}
@@ -474,7 +546,7 @@ export default function Index() {
                       ✅ Analytics Dashboard
                     </Badge>
                     <Badge variant="outline" className="text-green-600">
-                      ✅ Admin Interface
+                      ✅ Demo Mode Active
                     </Badge>
                   </div>
                 </div>
