@@ -59,12 +59,17 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
     const checkFirestore = () => {
       const firestore = initializeFirestore();
       
-      if (!firestore || !window.__app_id) {
-        setTimeout(checkFirestore, 100);
+      if (!firestore) {
+        // Use demo data if Firestore not available
+        console.log('Using demo data - Firestore not available');
+        setRequests([]);
+        setLoading(false);
         return;
       }
 
-      const collectionPath = `artifacts/${window.__app_id}/feature-requests`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
       
       // Create query based on user role
       let q;
@@ -132,19 +137,69 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
     appId: string;
     appName: string;
     tags?: string[];
+    testerInfo: {
+      name: string;
+      email: string;
+      role: string;
+    };
   }) => {
     if (!userId) throw new Error('User not authenticated');
 
     const firestore = initializeFirestore();
-    if (!firestore || !window.__app_id) throw new Error('Firestore not initialized');
+    
+    // FIXED: Always use demo mode when Firestore not available
+    if (!firestore) {
+      console.log('Creating demo request - Firestore not available');
+      const demoRequest: FeatureRequest = {
+        id: 'demo-' + Date.now(),
+        title: requestData.title,
+        description: requestData.description,
+        submittedBy: userId,
+        submitterName: requestData.testerInfo.name,
+        submitterRole: requestData.testerInfo.role as any,
+        appId: requestData.appId,
+        appName: requestData.appName,
+        status: 'submitted',
+        userPriority: requestData.userPriority,
+        timestamp: { toDate: () => new Date() } as Timestamp,
+        votes: 0,
+        comments: [],
+        watchers: [userId],
+        tags: requestData.tags || [],
+        // Add AI analysis for demo
+        aiAnalysis: {
+          category: 'enhancement',
+          complexity: Math.floor(Math.random() * 5) + 1,
+          clarityScore: Math.floor(Math.random() * 10) + 1,
+          sentiment: 'positive',
+          keywords: requestData.tags || [],
+          confidence: 0.8,
+          duplicates: [],
+          enhancementSuggestions: ['Consider adding more specific requirements', 'Include user impact metrics'],
+          analysisTimestamp: { toDate: () => new Date() } as Timestamp
+        },
+        priorityScore: {
+          overall: Math.random() * 10,
+          businessImpact: Math.random() * 10,
+          userDemand: Math.random() * 10,
+          technicalFeasibility: Math.random() * 10,
+          strategicAlignment: Math.random() * 10,
+          calculatedAt: { toDate: () => new Date() } as Timestamp
+        }
+      };
+      
+      setRequests(prev => [demoRequest, ...prev]);
+      return demoRequest.id;
+    }
 
     try {
-      // Create initial request
+      // Create initial request with tester information
       const newRequest: Omit<FeatureRequest, 'id'> = {
         title: requestData.title,
         description: requestData.description,
         submittedBy: userId,
-        submitterRole: userRole as any,
+        submitterName: requestData.testerInfo.name,
+        submitterRole: requestData.testerInfo.role as any,
         appId: requestData.appId,
         appName: requestData.appName,
         status: 'analyzing',
@@ -153,10 +208,15 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
         votes: 0,
         comments: [],
         watchers: [userId],
-        tags: requestData.tags || []
+        tags: requestData.tags || [],
+        // Store tester contact info
+        testerEmail: requestData.testerInfo.email
       };
 
-      const collectionPath = `artifacts/${window.__app_id}/feature-requests`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
       const docRef = await addDoc(collection(firestore, collectionPath), newRequest);
 
       // Perform AI analysis in background
@@ -177,7 +237,7 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   ) => {
     try {
       const firestore = initializeFirestore();
-      if (!firestore || !window.__app_id) return;
+      if (!firestore) return;
 
       // Step 1: AI Analysis
       const analysis = await analyzeFeatureRequest(title, description, appContext);
@@ -186,7 +246,11 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       const duplicates = await detectDuplicates({ title, description }, requests);
       
       // Update with AI analysis
-      const docPath = `artifacts/${window.__app_id}/feature-requests/${requestId}`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
+      const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         aiAnalysis: {
           ...analysis,
@@ -234,8 +298,12 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       
       // Update status to indicate analysis failed
       const firestore = initializeFirestore();
-      if (firestore && window.__app_id) {
-        const docPath = `artifacts/${window.__app_id}/feature-requests/${requestId}`;
+      if (firestore) {
+        const collectionPath = window.__app_id ? 
+          `artifacts/${window.__app_id}/feature-requests` : 
+          'feature-requests';
+        
+        const docPath = `${collectionPath}/${requestId}`;
         await updateDoc(doc(firestore, docPath), {
           status: 'submitted',
           aiAnalysis: {
@@ -258,10 +326,23 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
     if (!userId) throw new Error('User not authenticated');
 
     const firestore = initializeFirestore();
-    if (!firestore || !window.__app_id) throw new Error('Firestore not initialized');
+    
+    // If no Firestore, update demo data
+    if (!firestore) {
+      setRequests(prev => prev.map(req => 
+        req.id === requestId 
+          ? { ...req, status, ...(status === 'completed' && { actualCompletion: { toDate: () => new Date() } as Timestamp }) }
+          : req
+      ));
+      return;
+    }
 
     try {
-      const docPath = `artifacts/${window.__app_id}/feature-requests/${requestId}`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
+      const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         status,
         ...(status === 'completed' && { actualCompletion: serverTimestamp() })
@@ -276,13 +357,26 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
     if (!userId) throw new Error('User not authenticated');
 
     const firestore = initializeFirestore();
-    if (!firestore || !window.__app_id) throw new Error('Firestore not initialized');
+    
+    // If no Firestore, update demo data
+    if (!firestore) {
+      setRequests(prev => prev.map(req => 
+        req.id === requestId 
+          ? { ...req, votes: Math.max(0, req.votes + (increment ? 1 : -1)) }
+          : req
+      ));
+      return;
+    }
 
     try {
       const request = requests.find(r => r.id === requestId);
       if (!request) return;
 
-      const docPath = `artifacts/${window.__app_id}/feature-requests/${requestId}`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
+      const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         votes: Math.max(0, request.votes + (increment ? 1 : -1))
       });
@@ -296,10 +390,19 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
     if (!userId) throw new Error('User not authenticated');
 
     const firestore = initializeFirestore();
-    if (!firestore || !window.__app_id) throw new Error('Firestore not initialized');
+    
+    // If no Firestore, update demo data
+    if (!firestore) {
+      setRequests(prev => prev.filter(req => req.id !== requestId));
+      return;
+    }
 
     try {
-      const docPath = `artifacts/${window.__app_id}/feature-requests/${requestId}`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
+      const docPath = `${collectionPath}/${requestId}`;
       await deleteDoc(doc(firestore, docPath));
     } catch (err) {
       console.error('Error deleting request:', err);
@@ -328,12 +431,24 @@ export const useAnalytics = (userId: string | null) => {
     const checkFirestore = () => {
       const firestore = initializeFirestore();
       
-      if (!firestore || !window.__app_id) {
-        setTimeout(checkFirestore, 100);
+      if (!firestore) {
+        // Demo analytics
+        setAnalytics({
+          totalRequests: 0,
+          requestsByCategory: {},
+          requestsByStatus: {},
+          averagePriorityScore: 0,
+          topRequestedFeatures: [],
+          trendData: []
+        });
+        setLoading(false);
         return;
       }
 
-      const collectionPath = `artifacts/${window.__app_id}/feature-requests`;
+      const collectionPath = window.__app_id ? 
+        `artifacts/${window.__app_id}/feature-requests` : 
+        'feature-requests';
+      
       const q = query(collection(firestore, collectionPath));
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
