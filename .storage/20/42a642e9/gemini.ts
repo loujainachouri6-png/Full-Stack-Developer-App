@@ -1,0 +1,94 @@
+export interface ProductData {
+  productName: string;
+  description: string;
+  imageUrl: string;
+}
+
+const GEMINI_API_KEY = 'AIzaSyAIXEsy0O_sIbiRtabItJh5DIL137WW0N0';
+
+export const extractProductData = async (url: string): Promise<ProductData> => {
+  try {
+    // First, fetch the HTML content of the URL
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch URL content');
+    }
+
+    const data = await response.json();
+    const htmlContent = data.contents;
+
+    // Prepare the Gemini API request
+    const systemInstruction = `Act as a helpful product expert. When given a URL, extract the product name, a concise summary of the product's features and description (less than 100 words), and a URL for the main product image. Respond with a valid JSON object only.`;
+
+    const geminiPayload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: `System: ${systemInstruction}\n\nUser: Extract product information from this HTML content:\n\n${htmlContent.substring(0, 10000)}`
+            }
+          ]
+        }
+      ]
+    };
+
+    // Make request to Gemini API
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(geminiPayload)
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      throw new Error(`Gemini API request failed: ${geminiResponse.status}`);
+    }
+
+    const geminiResult = await geminiResponse.json();
+    const generatedText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!generatedText) {
+      throw new Error('No response from AI');
+    }
+
+    // Parse the JSON response
+    const cleanedText = generatedText.replace(/```json\n?|\n?```/g, '').trim();
+    const productData = JSON.parse(cleanedText);
+
+    // Validate the response structure
+    if (!productData.productName || !productData.description) {
+      throw new Error('Invalid AI response format');
+    }
+
+    // Ensure imageUrl is provided, use fallback if not
+    if (!productData.imageUrl) {
+      productData.imageUrl = '/placeholder-product.jpg';
+    }
+
+    return {
+      productName: productData.productName,
+      description: productData.description,
+      imageUrl: productData.imageUrl
+    };
+  } catch (error) {
+    console.error('Error extracting product data:', error);
+    
+    // Fallback: Try to extract basic info from the URL
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    
+    return {
+      productName: `Product from ${domain}`,
+      description: `Product found at ${domain}. AI extraction failed, please check the original URL for full details.`,
+      imageUrl: '/placeholder-product.jpg'
+    };
+  }
+};

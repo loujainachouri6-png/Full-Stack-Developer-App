@@ -1,0 +1,33 @@
+$ pnpm run build
+
+> shadcnui@ build /workspace/shadcn-ui
+> vite build
+
+vite v5.4.19 building for production...
+transforming...
+✓ 1060 modules transformed.
+x Build failed in 2.87s
+error during build:
+[vite:load-fallback] Could not load /workspace/shadcn-ui/src/components/AdminInterface (imported by src/pages/Index.tsx): ENOENT: no such file or directory, open '/workspace/shadcn-ui/src/components/AdminInterface'
+Error: Could not load /workspace/shadcn-ui/src/components/AdminInterface (imported by src/pages/Index.tsx): ENOENT: no such file or directory, open '/workspace/shadcn-ui/src/components/AdminInterface'
+ ELIFECYCLE  Command failed with exit code 1.
+$ pnpm run build
+
+
+> shadcnui@ build /workspace/shadcn-ui
+> vite build
+
+vite v5.4.19 building for production...
+transforming...
+✓ 1739 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.98 kB │ gzip:   0.48 kB
+dist/assets/index-C3hpBYzY.css   64.98 kB │ gzip:  11.26 kB
+dist/assets/index-GwXb4HLf.js   889.08 kB │ gzip: 242.67 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.21s
