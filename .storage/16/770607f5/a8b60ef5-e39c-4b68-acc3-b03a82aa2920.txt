@@ -1,0 +1,57 @@
+$ cd /workspace/shadcn-ui
+$ pnpm i && pnpm run lint && pnpm run build
+
+Lockfile is up to date, resolution step is skipped
+Packages: +427
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.../node_modules/@swc/core postinstall$ node postinstall.js
+.../node_modules/@swc/core postinstall: Done
+.../esbuild@0.21.5/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.25.8/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.21.5/node_modules/esbuild postinstall: Done
+.../esbuild@0.25.8/node_modules/esbuild postinstall: Done
+
+Done in 2.2s
+
+> shadcnui@ lint /workspace/shadcn-ui
+> eslint --quiet ./src
+
+
+/workspace/shadcn-ui/src/hooks/useAuth.ts
+  7:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/workspace/shadcn-ui/src/hooks/useFirestore.ts
+  18:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  32:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 3 problems (3 errors, 0 warnings)
+
+ ELIFECYCLE  Command failed with exit code 1.
+$ pnpm run lint && pnpm run build
+
+
+> shadcnui@ lint /workspace/shadcn-ui
+> eslint --quiet ./src
+
+
+> shadcnui@ build /workspace/shadcn-ui
+> vite build
+
+vite v5.4.19 building for production...
+transforming...
+✓ 75 modules transformed.
+x Build failed in 1.69s
+error during build:
+[vite]: Rollup failed to resolve import "firebase/app" from "/workspace/shadcn-ui/src/hooks/useAuth.ts".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`
+    at viteWarn (file:///workspace/shadcn-ui/node_modules/.pnpm/vite@5.4.19_@types+node@22.16.5/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:65839:17)
+    at onwarn (file:///workspace/shadcn-ui/node_modules/.pnpm/@vitejs+plugin-react-swc@3.11.0_vite@5.4.19/node_modules/@vitejs/plugin-react-swc/index.js:90:7)
+    at onRollupWarning (file:///workspace/shadcn-ui/node_modules/.pnpm/vite@5.4.19_@types+node@22.16.5/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:65869:5)
+    at onwarn (file:///workspace/shadcn-ui/node_modules/.pnpm/vite@5.4.19_@types+node@22.16.5/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:65534:7)
+    at file:///workspace/shadcn-ui/node_modules/.pnpm/rollup@4.45.1/node_modules/rollup/dist/es/shared/node-entry.js:20832:13
+    at Object.logger [as onLog] (file:///workspace/shadcn-ui/node_modules/.pnpm/rollup@4.45.1/node_modules/rollup/dist/es/shared/node-entry.js:22698:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///workspace/shadcn-ui/node_modules/.pnpm/rollup@4.45.1/node_modules/rollup/dist/es/shared/node-entry.js:21444:26)
+    at file:///workspace/shadcn-ui/node_modules/.pnpm/rollup@4.45.1/node_modules/rollup/dist/es/shared/node-entry.js:21402:26
+ ELIFECYCLE  Command failed with exit code 1.
