@@ -12,6 +12,8 @@ export interface FeatureRequest {
   status: 'submitted' | 'analyzing' | 'reviewed' | 'approved' | 'in-progress' | 'completed' | 'rejected';
   userPriority: 'low' | 'medium' | 'high' | 'critical';
   timestamp: Timestamp;
+  testerEmail?: string;
+
   
   // AI Analysis Results
   aiAnalysis?: {

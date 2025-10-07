@@ -1,32 +1,8 @@
 import { useState, useEffect } from 'react';
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken, User, Auth } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously, signInWithCustomToken, User } from 'firebase/auth';
+import { initializeFirebaseAuth, isFirebaseAvailable, getInitialAuthToken, getConfigurationStatus } from '@/lib/firebase';
 
-// Global variables from the platform
-declare global {
-  var __firebase_config: {
-    apiKey: string;
-    authDomain: string;
-    projectId: string;
-    storageBucket: string;
-    messagingSenderId: string;
-    appId: string;
-  };
-  var __initial_auth_token: string;
-}
-
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-
-const initializeFirebase = () => {
-  if (!app && window.__firebase_config) {
-    app = initializeApp(window.__firebase_config);
-    auth = getAuth(app);
-  }
-  return auth;
-};
-
-// Enhanced Firebase Authentication with faster initialization
+// FIXED: Enhanced Firebase Authentication with environment variable support
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,23 +11,32 @@ export const useAuth = () => {
   useEffect(() => {
     console.log('Starting Firebase Auth initialization...');
     
-    // Reduced timeout to 5 seconds for faster fallback
+    // Log configuration status for debugging
+    const configStatus = getConfigurationStatus();
+    console.log('Firebase configuration status:', configStatus);
+    
+    // FIXED: Reduced timeout to 3 seconds for faster fallback
     const authTimeout = setTimeout(() => {
-      console.warn('Auth check timed out after 5 seconds');
+      console.warn('Auth check timed out after 3 seconds, switching to demo mode');
       setLoading(false);
       if (!user) {
-        console.log('Auto-signing in anonymously after timeout');
-        handleAnonymousSignIn();
+        console.log('Auto-creating demo user after timeout');
+        setUser({
+          uid: 'demo-user-' + Date.now(),
+          isAnonymous: true,
+          email: null,
+          displayName: 'Demo User'
+        } as User);
       }
-    }, 5000);
+    }, 3000);
 
     const checkAndInitialize = () => {
-      // Check if Firebase config is available
-      if (!window.__firebase_config) {
-        // If no config after 2 seconds, create demo user
+      // FIXED: Check if Firebase is available (either MGX or environment variables)
+      if (!isFirebaseAvailable()) {
+        // FIXED: Reduced wait time from 2 seconds to 1 second
         setTimeout(() => {
-          if (!window.__firebase_config) {
-            console.log('No Firebase config found, using demo mode');
+          if (!isFirebaseAvailable()) {
+            console.log('No Firebase config found (neither MGX nor environment variables), using demo mode immediately');
             clearTimeout(authTimeout);
             setUser({
               uid: 'demo-user-' + Date.now(),
@@ -62,13 +47,13 @@ export const useAuth = () => {
             setLoading(false);
             return;
           }
-        }, 2000);
+        }, 1000);
         
         setTimeout(checkAndInitialize, 100);
         return;
       }
 
-      const firebaseAuth = initializeFirebase();
+      const firebaseAuth = initializeFirebaseAuth();
       
       if (!firebaseAuth) {
         console.error('Firebase Auth initialization failed, using demo mode');
@@ -111,14 +96,15 @@ export const useAuth = () => {
       // Auto sign-in with faster fallback
       const autoSignIn = async () => {
         try {
-          if (window.__initial_auth_token) {
+          const initialToken = getInitialAuthToken();
+          if (initialToken) {
             console.log('Attempting sign-in with custom token...');
-            await signInWithCustomToken(firebaseAuth, window.__initial_auth_token);
+            await signInWithCustomToken(firebaseAuth, initialToken);
           } else {
             console.log('Attempting anonymous sign-in...');
             await signInAnonymously(firebaseAuth);
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Auto sign-in error:', error);
           // Fallback to demo user immediately
           clearTimeout(authTimeout);
@@ -151,7 +137,7 @@ export const useAuth = () => {
       setLoading(true);
       setError(null);
       
-      const firebaseAuth = initializeFirebase();
+      const firebaseAuth = initializeFirebaseAuth();
       if (!firebaseAuth) {
         throw new Error('Firebase Auth not initialized');
       }
@@ -159,7 +145,7 @@ export const useAuth = () => {
       const result = await signInAnonymously(firebaseAuth);
       console.log('Manual anonymous sign-in successful:', result.user.uid);
       return result.user;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Manual anonymous sign-in error:', error);
       // Fallback to demo user
       setUser({
@@ -172,7 +158,7 @@ export const useAuth = () => {
     }
   };
 
-  // Demo mode bypass for testing
+  // FIXED: Immediate demo mode bypass
   const forceSkipAuth = () => {
     console.log('Forcing skip of authentication - demo mode');
     setLoading(false);

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { initializeApp, FirebaseApp } from 'firebase/app';
 import { 
-  getFirestore, 
   collection, 
   addDoc, 
   updateDoc,
@@ -11,11 +9,10 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  where,
-  Timestamp,
-  Firestore
+  Timestamp
 } from 'firebase/firestore';
-import { FeatureRequest, App, AnalyticsData } from '@/types/FeatureRequest';
+import { initializeFirestore, isFirebaseAvailable, getConfigurationStatus } from '@/lib/firebase';
+import { FeatureRequest, AnalyticsData } from '@/types/FeatureRequest';
 import { 
   analyzeFeatureRequest, 
   calculatePriorityScore, 
@@ -24,29 +21,20 @@ import {
   detectDuplicates
 } from '@/lib/aiAnalysis';
 
+// Role mapping
+const roleMap: Record<string, FeatureRequest['submitterRole']> = {
+  'end-user': 'external',
+  'beta-tester': 'community',
+  'business-user': 'enterprise',
+  'admin': 'internal',
+  'developer': 'internal',
+  'other': 'external'
+};
+
 // Global variables
 declare global {
-  var __firebase_config: {
-    apiKey: string;
-    authDomain: string;
-    projectId: string;
-    storageBucket: string;
-    messagingSenderId: string;
-    appId: string;
-  };
   var __app_id: string;
 }
-
-let app: FirebaseApp | null = null;
-let db: Firestore | null = null;
-
-const initializeFirestore = () => {
-  if (!app && window.__firebase_config) {
-    app = initializeApp(window.__firebase_config);
-    db = getFirestore(app);
-  }
-  return db;
-};
 
 export const useFeatureRequests = (userId: string | null, userRole: string = 'external') => {
   const [requests, setRequests] = useState<FeatureRequest[]>([]);
@@ -56,12 +44,19 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   useEffect(() => {
     if (!userId) return;
 
+    console.log('Firebase configuration status:', getConfigurationStatus());
+
     const checkFirestore = () => {
+      if (!isFirebaseAvailable()) {
+        console.log('Using demo data - Firebase not available');
+        setRequests([]);
+        setLoading(false);
+        return;
+      }
+
       const firestore = initializeFirestore();
-      
       if (!firestore) {
-        // Use demo data if Firestore not available
-        console.log('Using demo data - Firestore not available');
+        console.log('Using demo data - Firestore initialization failed');
         setRequests([]);
         setLoading(false);
         return;
@@ -70,31 +65,24 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
-      // Create query based on user role
+
       let q;
       if (userRole === 'admin' || userRole === 'manager') {
-        // Admins see all requests
-        q = query(
-          collection(firestore, collectionPath),
-          orderBy('timestamp', 'desc')
-        );
+        q = query(collection(firestore, collectionPath), orderBy('timestamp', 'desc'));
       } else {
-        // Regular users see their own requests + public ones
-        q = query(
-          collection(firestore, collectionPath),
-          orderBy('timestamp', 'desc')
-        );
+        q = query(collection(firestore, collectionPath), orderBy('timestamp', 'desc'));
       }
 
-      const unsubscribe = onSnapshot(q, 
-        (snapshot) => {
+      const unsubscribe = onSnapshot(
+        q, 
+        snapshot => {
           const requestList: FeatureRequest[] = [];
-          snapshot.forEach((doc) => {
+          snapshot.forEach(doc => {
             const data = doc.data();
-            requestList.push({ 
-              id: doc.id, 
+            requestList.push({
+              id: doc.id,
               ...data,
+              submitterRole: data.submitterRole || 'external',
               timestamp: data.timestamp || null,
               aiAnalysis: data.aiAnalysis ? {
                 ...data.aiAnalysis,
@@ -117,7 +105,7 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
           setRequests(requestList);
           setLoading(false);
         },
-        (err) => {
+        err => {
           console.error('Firestore error:', err);
           setError('Failed to load feature requests');
           setLoading(false);
@@ -145,18 +133,16 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   }) => {
     if (!userId) throw new Error('User not authenticated');
 
-    const firestore = initializeFirestore();
-    
-    // FIXED: Always use demo mode when Firestore not available
-    if (!firestore) {
-      console.log('Creating demo request - Firestore not available');
+    if (!isFirebaseAvailable()) {
+      console.log('Creating demo request - Firebase not available');
+
       const demoRequest: FeatureRequest = {
         id: 'demo-' + Date.now(),
         title: requestData.title,
         description: requestData.description,
         submittedBy: userId,
         submitterName: requestData.testerInfo.name,
-        submitterRole: requestData.testerInfo.role as any,
+        submitterRole: roleMap[requestData.testerInfo.role] || 'external',
         appId: requestData.appId,
         appName: requestData.appName,
         status: 'submitted',
@@ -166,40 +152,44 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
         comments: [],
         watchers: [userId],
         tags: requestData.tags || [],
-        // Add AI analysis for demo
         aiAnalysis: {
           category: 'enhancement',
           complexity: Math.floor(Math.random() * 5) + 1,
           clarityScore: Math.floor(Math.random() * 10) + 1,
-          sentiment: 'positive',
+          sentiment: 'neutral',
           keywords: requestData.tags || [],
           confidence: 0.8,
           duplicates: [],
-          enhancementSuggestions: ['Consider adding more specific requirements', 'Include user impact metrics'],
+          enhancementSuggestions: [
+            'Consider adding more specific requirements',
+            'Include user impact metrics'
+          ],
           analysisTimestamp: { toDate: () => new Date() } as Timestamp
         },
         priorityScore: {
           overall: Math.random() * 10,
           businessImpact: Math.random() * 10,
           userDemand: Math.random() * 10,
-          technicalFeasibility: Math.random() * 10,
+          implementationFeasibility: Math.random() * 10,
           strategicAlignment: Math.random() * 10,
           calculatedAt: { toDate: () => new Date() } as Timestamp
         }
       };
-      
+
       setRequests(prev => [demoRequest, ...prev]);
       return demoRequest.id;
     }
 
+    const firestore = initializeFirestore();
+    if (!firestore) throw new Error('Firestore not available');
+
     try {
-      // Create initial request with tester information
       const newRequest: Omit<FeatureRequest, 'id'> = {
         title: requestData.title,
         description: requestData.description,
         submittedBy: userId,
         submitterName: requestData.testerInfo.name,
-        submitterRole: requestData.testerInfo.role as any,
+        submitterRole: roleMap[requestData.testerInfo.role] || 'external',
         appId: requestData.appId,
         appName: requestData.appName,
         status: 'analyzing',
@@ -209,17 +199,15 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
         comments: [],
         watchers: [userId],
         tags: requestData.tags || [],
-        // Store tester contact info
-        testerEmail: requestData.testerInfo.email
+        testerEmail: requestData.testerInfo.email,
       };
 
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const docRef = await addDoc(collection(firestore, collectionPath), newRequest);
 
-      // Perform AI analysis in background
       performAIAnalysis(docRef.id, requestData.title, requestData.description, requestData.appName);
 
       return docRef.id;
@@ -239,17 +227,13 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       const firestore = initializeFirestore();
       if (!firestore) return;
 
-      // Step 1: AI Analysis
       const analysis = await analyzeFeatureRequest(title, description, appContext);
-      
-      // Step 2: Detect duplicates
       const duplicates = await detectDuplicates({ title, description }, requests);
-      
-      // Update with AI analysis
+
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         aiAnalysis: {
@@ -260,24 +244,18 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
         status: 'reviewed'
       });
 
-      // Get the updated request for further analysis
       const updatedRequest = requests.find(r => r.id === requestId);
       if (!updatedRequest) return;
 
-      // Step 3: Calculate priority score
       const priorityScore = await calculatePriorityScore(
         { ...updatedRequest, aiAnalysis: { ...analysis, duplicates, analysisTimestamp: serverTimestamp() as Timestamp } },
         analysis,
-        1 // Base user demand factor
+        1
       );
 
-      // Step 4: Estimate effort
       const effortEstimate = await estimateEffort(updatedRequest, analysis);
-
-      // Step 5: Assess business impact
       const businessImpact = await assessBusinessImpact(updatedRequest, analysis);
 
-      // Final update with all analysis
       await updateDoc(doc(firestore, docPath), {
         priorityScore: {
           ...priorityScore,
@@ -295,14 +273,11 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
 
     } catch (error) {
       console.error('AI Analysis failed:', error);
-      
-      // Update status to indicate analysis failed
       const firestore = initializeFirestore();
       if (firestore) {
         const collectionPath = window.__app_id ? 
           `artifacts/${window.__app_id}/feature-requests` : 
           'feature-requests';
-        
         const docPath = `${collectionPath}/${requestId}`;
         await updateDoc(doc(firestore, docPath), {
           status: 'submitted',
@@ -325,10 +300,7 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   const updateRequestStatus = async (requestId: string, status: FeatureRequest['status']) => {
     if (!userId) throw new Error('User not authenticated');
 
-    const firestore = initializeFirestore();
-    
-    // If no Firestore, update demo data
-    if (!firestore) {
+    if (!isFirebaseAvailable()) {
       setRequests(prev => prev.map(req => 
         req.id === requestId 
           ? { ...req, status, ...(status === 'completed' && { actualCompletion: { toDate: () => new Date() } as Timestamp }) }
@@ -337,11 +309,14 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       return;
     }
 
+    const firestore = initializeFirestore();
+    if (!firestore) throw new Error('Firestore not available');
+
     try {
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         status,
@@ -356,10 +331,7 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   const voteOnRequest = async (requestId: string, increment: boolean = true) => {
     if (!userId) throw new Error('User not authenticated');
 
-    const firestore = initializeFirestore();
-    
-    // If no Firestore, update demo data
-    if (!firestore) {
+    if (!isFirebaseAvailable()) {
       setRequests(prev => prev.map(req => 
         req.id === requestId 
           ? { ...req, votes: Math.max(0, req.votes + (increment ? 1 : -1)) }
@@ -368,6 +340,9 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       return;
     }
 
+    const firestore = initializeFirestore();
+    if (!firestore) throw new Error('Firestore not available');
+
     try {
       const request = requests.find(r => r.id === requestId);
       if (!request) return;
@@ -375,7 +350,7 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const docPath = `${collectionPath}/${requestId}`;
       await updateDoc(doc(firestore, docPath), {
         votes: Math.max(0, request.votes + (increment ? 1 : -1))
@@ -389,19 +364,19 @@ export const useFeatureRequests = (userId: string | null, userRole: string = 'ex
   const deleteRequest = async (requestId: string) => {
     if (!userId) throw new Error('User not authenticated');
 
-    const firestore = initializeFirestore();
-    
-    // If no Firestore, update demo data
-    if (!firestore) {
+    if (!isFirebaseAvailable()) {
       setRequests(prev => prev.filter(req => req.id !== requestId));
       return;
     }
+
+    const firestore = initializeFirestore();
+    if (!firestore) throw new Error('Firestore not available');
 
     try {
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const docPath = `${collectionPath}/${requestId}`;
       await deleteDoc(doc(firestore, docPath));
     } catch (err) {
@@ -429,10 +404,21 @@ export const useAnalytics = (userId: string | null) => {
     if (!userId) return;
 
     const checkFirestore = () => {
+      if (!isFirebaseAvailable()) {
+        setAnalytics({
+          totalRequests: 0,
+          requestsByCategory: {},
+          requestsByStatus: {},
+          averagePriorityScore: 0,
+          topRequestedFeatures: [],
+          trendData: []
+        });
+        setLoading(false);
+        return;
+      }
+
       const firestore = initializeFirestore();
-      
       if (!firestore) {
-        // Demo analytics
         setAnalytics({
           totalRequests: 0,
           requestsByCategory: {},
@@ -448,18 +434,15 @@ export const useAnalytics = (userId: string | null) => {
       const collectionPath = window.__app_id ? 
         `artifacts/${window.__app_id}/feature-requests` : 
         'feature-requests';
-      
+
       const q = query(collection(firestore, collectionPath));
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const unsubscribe = onSnapshot(q, snapshot => {
         const allRequests: FeatureRequest[] = [];
-        snapshot.forEach((doc) => {
-          allRequests.push({ id: doc.id, ...doc.data() } as FeatureRequest);
-        });
+        snapshot.forEach(doc => allRequests.push({ id: doc.id, ...doc.data() } as FeatureRequest));
 
-        // Calculate analytics
         const totalRequests = allRequests.length;
-        
+
         const requestsByCategory = allRequests.reduce((acc, req) => {
           const category = req.aiAnalysis?.category || 'uncategorized';
           acc[category] = (acc[category] || 0) + 1;
@@ -486,9 +469,9 @@ export const useAnalytics = (userId: string | null) => {
           requestsByStatus,
           averagePriorityScore,
           topRequestedFeatures,
-          trendData: [] // Would need historical data for trends
+          trendData: []
         });
-        
+
         setLoading(false);
       });
 
